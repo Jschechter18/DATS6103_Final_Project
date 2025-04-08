@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import os
+from scipy import stats
 
 
 #%%[markdown]
@@ -70,6 +71,37 @@ def load_data(file_path):
 def replace_col_name(df, col_name_mapping):
     df.rename(columns=col_name_mapping, inplace=True)
     return df
+
+
+# Create the binary feature (1 = lower risk, 0 = higher risk)
+def create_risk_binary(row, limit_mean):
+    high_limit = row["LIMIT_BAL"] > limit_mean
+    
+    # Check if payments were made in the last 3 months
+    # Assuming no delay in payment status indicates payments were made on time
+    last_3_months = ["Sept_Pay_status", "August_Pay_status", "July_Pay_status"]
+    good_payment = all(row[col] <= 0 for col in last_3_months)  # No delays
+    
+    if high_limit and good_payment:
+        return 1
+    else:
+        return 0
+    
+def plot_correlation(feature_cols):
+    target_col = "default_payment_next_month"
+    columns = feature_cols + [target_col]
+
+    # Compute correlation matrix
+    correlation_matrix = clients_data[columns].corr()
+
+    target_correlation = correlation_matrix[target_col].sort_values(ascending=False)
+
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
+    plt.title("Correlation Matrix with Target: default_payment_next_month")
+    plt.show()
+
+    return target_correlation
 
 #%%
 # Load data
@@ -157,6 +189,10 @@ for col in float_cols:
 
 # clients_data.head()
 
+#%%
+# Functions:
+
+
 #%%[markdown]
 ## SMART Questions
 # 1. What features are the best predictors of defaulting payments?
@@ -177,21 +213,7 @@ Correlation matrix
 
 #%%
 
-def plot_correlation(feature_cols):
-    target_col = "default_payment_next_month"
-    columns = feature_cols + [target_col]
 
-    # Compute correlation matrix
-    correlation_matrix = clients_data[columns].corr()
-
-    target_correlation = correlation_matrix[target_col].sort_values(ascending=False)
-
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
-    plt.title("Correlation Matrix with Target: default_payment_next_month")
-    plt.show()
-
-    return target_correlation
 
 # %%
 # Correlation matrix
@@ -325,9 +347,6 @@ print(default_correlations)
 
 #%%
 
-# Point-Biserial correlation
-from scipy import stats
-
 continuous_vars = [
     "LIMIT_BAL", 
     "Mean_Pay_Status_First_Half", 
@@ -371,28 +390,13 @@ clients_data.describe()
 limit_mean = clients_data["LIMIT_BAL"].mean()
 print(f"Mean LIMIT_BAL: {limit_mean}")
 
-# Create the binary feature (1 = lower risk, 0 = higher risk)
-def create_risk_binary(row):
-    high_limit = row["LIMIT_BAL"] > limit_mean
-    
-    # Check if payments were made in the last 3 months
-    # Assuming no delay in payment status indicates payments were made on time
-    last_3_months = ["Sept_Pay_status", "August_Pay_status", "July_Pay_status"]
-    good_payment = all(row[col] <= 0 for col in last_3_months)  # No delays
-    
-    if high_limit and good_payment:
-        return 1
-    else:
-        return 0
+
 
 # Apply the function to create the new binary feature
 clients_data["Low_Risk_Flag"] = clients_data.apply(create_risk_binary, axis=1)
 
 correlation_result_update_five = plot_correlation(["Low_Risk_Flag"])
 print(correlation_result_update_five)
-
-
-
 
 
 # clients_data["Mean_Bill_Amount"]
@@ -406,7 +410,6 @@ def update_col(row):
     return row['Mean_Bill_Amount'] >= row['threshhold_amt'] 
     # print(t)
         
-
 clients_data["Approached_Limit"] =  clients_data.apply(update_col, axis=1) 
 
 
@@ -418,65 +421,33 @@ clients_data.info()
 
 # high Lmit_bal vs Low education value
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# %%
-# Distributions
-
-# Age
-plt.figure()
-sns.histplot(clients_data["AGE"], bins=50, kde=True)
-plt.title("Age Distribution")
+#%%
+"""
+- high Lmit_bal vs Low education value
+- if the customer is single/divorced and has a higher bill amount 
+with bad momentum there is a chance he might default
+"""
 
 
 #%%
-# Amount of bill statement in September, 2005
-plt.figure()
-sns.histplot(clients_data["Sept_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in September, 2005 Distribution")
-plt.xlim(0, 20000)
+# Define high limit balance threshold (e.g., above the mean)
+limit_mean = clients_data["LIMIT_BAL"].mean()
+clients_data["High_Limit_Balance"] = clients_data["LIMIT_BAL"] > limit_mean
 
-# Amount of bill statement in August, 2005
-plt.figure()
-sns.histplot(clients_data["August_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in August, 2005 Distribution")
-plt.xlim(0, 20000)
+# Filter for low education levels (e.g., high school or others)
+clients_data["Low_Education"] = clients_data["EDUCATION"].isin([3, 4])
 
-# Amount of bill statement in July, 2005
-plt.figure()
-sns.histplot(clients_data["July_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in July, 2005 Distribution")
-plt.xlim(0, 20000)
+# Crosstab to analyze the relationship
+crosstab = pd.crosstab(
+    [clients_data["High_Limit_Balance"], clients_data["Low_Education"]],
+    clients_data["default_payment_next_month"],
+    normalize="index"
+)
 
-# Amount of bill statement in June, 2005
-plt.figure()
-sns.histplot(clients_data["June_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in June, 2005 Distribution")
-plt.xlim(0, 20000)
-
-# Amount of bill statement in May, 2005
-plt.figure()
-sns.histplot(clients_data["May_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in May, 2005 Distribution")
-plt.xlim(0, 20000)
-
-# Amount of bill statement in April, 2005
-plt.figure()
-sns.histplot(clients_data["April_Bill_Amount"], bins=50, kde=True)
-plt.title("Bill Amount in April, 2005 Distribution")
-plt.xlim(0, 20000)
-
-# %%
+print("Crosstab of High Limit Balance, Low Education, and Default Payment:")
+print(crosstab)
+# %%[markdown]
+## EDA Conclusion
+# 
+# 1.
+#%%

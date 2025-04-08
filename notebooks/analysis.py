@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import os
+from scipy.stats import spearmanr
 
 
 #%%[markdown]
@@ -73,12 +73,12 @@ def replace_col_name(df, col_name_mapping):
     df.rename(columns=col_name_mapping, inplace=True)
     return df
 
-def create_risk_binary(row, limit_mean):
+def create_risk_binary(row, limit_mean, last_3_months=["Sept_Pay_status", "August_Pay_status", "July_Pay_status"]):
     high_limit = row["LIMIT_BAL"] > limit_mean
     
     # Check if payments were made in the last 3 months
     # Assuming no delay in payment status indicates payments were made on time
-    last_3_months = ["Sept_Pay_status", "August_Pay_status", "July_Pay_status"]
+    # last_3_months = ["Sept_Pay_status", "August_Pay_status", "July_Pay_status"]
     good_payment = all(row[col] <= 0 for col in last_3_months)  # No delays
     
     if high_limit and good_payment:
@@ -108,9 +108,6 @@ clients_data = load_data("../data/credit_card_clients_full.csv")
 # Drop unnecessary columns
 clients_data.drop(columns=["Unnamed: 0"], inplace=True, axis=1)
 
-#%%[markdown]
-
-
 # %%
 # Clean data
 
@@ -118,6 +115,7 @@ clients_data.drop(columns=["Unnamed: 0"], inplace=True, axis=1)
 clients_data.dropna(inplace=True)
 
 column_mappings = {
+    # "default.payment.next.month": "default",
     "default.payment.next.month": "default_payment_next_month",
     "PAY_0": "Sept_Pay_status",
     "PAY_2": "August_Pay_status",
@@ -170,9 +168,27 @@ for col in nt_dollar_columns:
 # Verify the conversion
 clients_data[nt_dollar_columns].head()
 
+# Calculate momentum based on payment status
+# Define the payment status columns in chronological order
+pay_status_cols = [
+    "April_Pay_status", "May_Pay_status", "June_Pay_status",
+    "July_Pay_status", "August_Pay_status", "Sept_Pay_status"
+]
+
+# Function to calculate momentum
+def calculate_momentum(row):
+    # Check if payment status is worsening month-to-month
+    worsening = all(row[pay_status_cols[i]] <= row[pay_status_cols[i + 1]] for i in range(len(pay_status_cols) - 1))
+    return "Bad Momentum" if worsening else "Stable/Improving"
+
+# Apply the function to create the momentum column
+clients_data["Momentum"] = clients_data.apply(calculate_momentum, axis=1)
+# clients_data["Momentum"] = clients_data.apply(calculate_momentum, axis=1)
 
 # View the resulting dataframe
 clients_data.head()
+
+
 
 #%%[markdown]
 ## SMART Questions
@@ -191,7 +207,7 @@ clients_data.head()
 #%%
 
 # Correlation matrix
-correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION"])
+correlation_result = plot_correlation(clients_data, ["AGE", "SEX", "MARRIAGE", "EDUCATION"], method="spearman")
 print(correlation_result)
 
 #%%
@@ -205,7 +221,7 @@ pay_status_cols = [
     "April_Pay_status"
 ]
 
-clients_data["Mean_Pay_Status"] = clients_data[pay_status_cols].mean(axis=1)
+# clients_data["Mean_Pay_Status"] = clients_data[pay_status_cols].mean(axis=1)
 
 # Creating an average of Pay_anount
 pay_amount_cols = [
@@ -231,65 +247,16 @@ bill_amount_cols = [
 
 clients_data["Mean_Bill_Amount"] = clients_data[bill_amount_cols].mean(axis=1)
 
-# clients_data.head()
-
-correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION", "Mean_Pay_Status", "Mean_Pay_Amount", "Mean_Bill_Amount"])
+# correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION", "Mean_Pay_Status", "Mean_Pay_Amount", "Mean_Bill_Amount"])
+correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION", "Mean_Pay_Amount", "Mean_Bill_Amount"])
 print(correlation_result)
 
 # Conclusion: Mean Pay status has a strong correlation with the target column
-
-#%%
-
-# Creating an average of Pay_status(Pay_) for April, May, June
-pay_status_cols_first_half = [
-    "June_Pay_status",
-    "May_Pay_status",
-    "April_Pay_status"
-]
-
-clients_data["Mean_Pay_Status_First_Half"] = clients_data[pay_status_cols_first_half].mean(axis=1)
-
-# Convert the categorical columns to numeric first, then calculate mean
-pay_status_cols_second_half = [
-    "Sept_Pay_status",
-    "August_Pay_status",
-    "July_Pay_status",
-]
-
-# Create numeric versions of the columns
-for col in pay_status_cols_second_half:
-    # Create a new numeric column based on the categorical one
-    clients_data[col + "_numeric"] = clients_data[col].astype(int)
-
-# Use the numeric versions to calculate the mean
-numeric_cols_second_half = [col + "_numeric" for col in pay_status_cols_second_half]
-clients_data["Mean_Pay_Status_Second_Half"] = clients_data[numeric_cols_second_half].mean(axis=1)
-
-
-correlation_result = plot_correlation(clients_data, ["Mean_Pay_Status_First_Half", "Mean_Pay_Status_Second_Half", "LIMIT_BAL"])
-print(correlation_result)
 
 
 #%%
 correlation_result = plot_correlation(clients_data, ["Sept_Pay_status","August_Pay_status","July_Pay_status", "June_Pay_status", "May_Pay_status","April_Pay_status"], method="spearman")
 print(correlation_result)
-
-# Conclusion: Clear pattern where more recent payment statuses have stronger correlations with default
-
-#%%
-# Creating a new column to check if the client is approaching their limit
-threshold = 0.9
-clients_data['threshhold_amt'] = clients_data['LIMIT_BAL'] * threshold
-
-def approaching_threshold(row):
-    return row['Mean_Bill_Amount'] >= row['threshhold_amt']
-
-clients_data["Approached_Limit"] =  clients_data.apply(approaching_threshold, axis=1)
-
-correlation_result = plot_correlation(clients_data, ["Mean_Pay_Status_Second_Half", "Approached_Limit"])
-print(correlation_result)
-
-clients_data.info()
 
 # %%[markdown]
 # EDA Takeaways so far:
@@ -308,3 +275,56 @@ plt.title("Distribution of Credit Limit (LIMIT_BAL)")
 plt.xlabel("Credit Limit (USD)")
 plt.ylabel("Frequency")
 plt.show()
+
+# Plotting the distribution of default payments to April
+plt.figure(figsize=(8, 6))
+sns.histplot(data=clients_data, x="April_Pay_status", hue="default_payment_next_month", multiple="stack", bins=30, palette="Set2")
+plt.title("Distribution of Default Payments in April by Payment Status")
+plt.xlabel("April Payment Status")
+plt.ylabel("Frequency")
+plt.show()
+
+# Plotting the distribution of default payments to September
+plt.figure(figsize=(8, 6))
+sns.histplot(data=clients_data, x="Sept_Pay_status", hue="default_payment_next_month", multiple="stack", bins=30, palette="Set2")
+plt.title("Distribution of Default Payments in September by Payment Status")
+plt.xlabel("September Payment Status")
+plt.ylabel("Frequency")
+plt.show()
+
+# Display count of default payments
+default_counts = clients_data["default_payment_next_month"].value_counts()
+print(f"Default Payment Counts: {default_counts}")
+
+#%%
+# I want to plot odds of defaulting based on momentum
+plt.figure(figsize=(8, 6))
+sns.histplot(data=clients_data, x="Momentum", hue="default_payment_next_month", multiple="stack", bins=30, palette="Set2")
+plt.title("Distribution of Default Payments by Momentum")
+plt.xlabel("Momentum")
+plt.ylabel("Frequency")
+plt.show()
+
+# Show the proportion of default payments by momentum
+print(clients_data.groupby("Momentum")["default_payment_next_month"].value_counts(normalize=True))
+#%%[markdown]
+# Bad Momentum  
+#    
+# 0: 0.808059
+# 
+# 1: 0.191941
+# 
+# Stable/Improving
+# 
+# 0: 0.726717
+# 
+# 1: 0.273283
+# 
+# There is a slight uptick in likelihood of defaulting when the momentum is bad.
+
+# %%[markdown]
+# Clients who defaulted in October, were more likely to have later payment status in September.
+# This reinforces the idea that payment status is a good predictor of default.
+#
+# There is a weak, but present correlation between momentum and default payment.
+
