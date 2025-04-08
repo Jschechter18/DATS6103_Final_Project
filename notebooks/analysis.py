@@ -176,17 +176,16 @@ pay_status_cols = [
 ]
 
 # Function to calculate momentum
-def calculate_momentum(row):
-    # Check if payment status is worsening month-to-month
-    worsening = all(row[pay_status_cols[i]] <= row[pay_status_cols[i + 1]] for i in range(len(pay_status_cols) - 1))
-    return "Bad Momentum" if worsening else "Stable/Improving"
+def calculate_weighted_momentum(row):
+    weights = [1, 2, 3, 4, 5, 6]  # Weights for April to September
+    weighted_sum = sum(weights[i] * row[pay_status_cols[i]] for i in range(len(pay_status_cols)))
+    return "Bad Momentum" if weighted_sum > 20 else "Stable/Improving"  # Adjust threshold as needed
 
-# Apply the function to create the momentum column
-clients_data["Momentum"] = clients_data.apply(calculate_momentum, axis=1)
-# clients_data["Momentum"] = clients_data.apply(calculate_momentum, axis=1)
+clients_data["Momentum"] = clients_data.apply(calculate_weighted_momentum, axis=1)
 
 # View the resulting dataframe
 clients_data.head()
+
 
 
 
@@ -194,13 +193,12 @@ clients_data.head()
 ## SMART Questions
 # 1. What features are the best predictors of defaulting payments?
 #
-# 2. How does level of education and marriage status correlate with the clients risk of defaulting on their payments?
-#
-# 3. Are younger clients more likely to default on their payments than older clients?
-#
+# 2. How does the payment status trend affect the likelihood of defaulting in October 2005?
+# 
+# 3. Does limit balance affect the likelihood of defaulting in October 2005?
+# 
 # 4. Does having a higher credit limit reduce the likelihood of a client defaulting in October 2005, based on financial behavior from the previous six months?
 #
-# 5. Do clients who make the minimum payments month have a higher likelihood of defaulting at any given month?
 #
 ## Exploratory Data Analysis (EDA)
 
@@ -297,7 +295,6 @@ default_counts = clients_data["default_payment_next_month"].value_counts()
 print(f"Default Payment Counts: {default_counts}")
 
 #%%
-# I want to plot odds of defaulting based on momentum
 plt.figure(figsize=(8, 6))
 sns.histplot(data=clients_data, x="Momentum", hue="default_payment_next_month", multiple="stack", bins=30, palette="Set2")
 plt.title("Distribution of Default Payments by Momentum")
@@ -310,15 +307,11 @@ print(clients_data.groupby("Momentum")["default_payment_next_month"].value_count
 #%%[markdown]
 # Bad Momentum  
 #    
-# 0: 0.808059
-# 
-# 1: 0.191941
+# 0: 0.358769  -  1: 0.641231
 # 
 # Stable/Improving
 # 
-# 0: 0.726717
-# 
-# 1: 0.273283
+# 0: 0.829832  -  1: 0.170168
 # 
 # There is a slight uptick in likelihood of defaulting when the momentum is bad.
 
@@ -326,5 +319,8 @@ print(clients_data.groupby("Momentum")["default_payment_next_month"].value_count
 # Clients who defaulted in October, were more likely to have later payment status in September.
 # This reinforces the idea that payment status is a good predictor of default.
 #
-# There is a weak, but present correlation between momentum and default payment.
+# There is a relationship between momentum and default payment.
+# 
+# There is a relationship between high limit balance and default payment.
 
+# %%
