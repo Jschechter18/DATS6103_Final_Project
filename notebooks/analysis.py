@@ -61,7 +61,6 @@ from scipy.stats import spearmanr
 
 ## Data Preprocessing
 
-
 #%%
 # Functions
 def load_data(file_path):
@@ -100,6 +99,14 @@ def plot_correlation(df, feature_cols, method="pearson", target_col = "default_p
     plt.show()
 
     return target_correlation
+
+# Function to calculate momentum by row
+def calculate_weighted_momentum(row):
+    weights = [1, 2, 3, 4, 5, 6]  # Weights for April to September, increasing the closer to October
+    weighted_sum = sum(weights[i] * row[pay_status_cols[i]] for i in range(len(pay_status_cols)))
+    # return "Bad Momentum" if weighted_sum > 20 else "Stable/Improving"  # Adjust threshold as needed
+    # 0 is good, 1 is bad
+    return 1 if weighted_sum > 20 else 0  # Adjust threshold as needed
 
 #%%
 # Load data
@@ -175,13 +182,10 @@ pay_status_cols = [
     "July_Pay_status", "August_Pay_status", "Sept_Pay_status"
 ]
 
-# Function to calculate momentum
-def calculate_weighted_momentum(row):
-    weights = [1, 2, 3, 4, 5, 6]  # Weights for April to September
-    weighted_sum = sum(weights[i] * row[pay_status_cols[i]] for i in range(len(pay_status_cols)))
-    return "Bad Momentum" if weighted_sum > 20 else "Stable/Improving"  # Adjust threshold as needed
+
 
 clients_data["Momentum"] = clients_data.apply(calculate_weighted_momentum, axis=1)
+clients_data["Momentum_Label"] = clients_data["Momentum"].map({0: "Stable/Improving", 1: "Bad Momentum"})
 
 # View the resulting dataframe
 clients_data.head()
@@ -191,22 +195,34 @@ clients_data.head()
 
 #%%[markdown]
 ## SMART Questions
-# 1. What features are the best predictors of defaulting payments?
-#
-# 2. How does the payment status trend affect the likelihood of defaulting in October 2005?
+# 1. How does the payment status trend affect the likelihood of defaulting in October 2005?
 # 
-# 3. Does limit balance affect the likelihood of defaulting in October 2005?
+# 2. Does limit balance affect the likelihood of defaulting in October 2005?
 # 
-# 4. Does having a higher credit limit reduce the likelihood of a client defaulting in October 2005, based on financial behavior from the previous six months?
+# 3. Does having a higher credit limit reduce the likelihood of a client defaulting in October 2005, based on financial behavior from the previous six months?
 #
-#
+# 4. Do age, sex, marriage, or education levels have any impact on the likelihood of defaulting in October 2005?
+# 
 ## Exploratory Data Analysis (EDA)
 
 #%%
 
-# Correlation matrix
-correlation_result = plot_correlation(clients_data, ["AGE", "SEX", "MARRIAGE", "EDUCATION"], method="spearman")
-print(correlation_result)
+# Correlation matrix of Age, sex, marriage, and education with defaulting
+client_background_correlation_result = plot_correlation(clients_data, ["AGE", "SEX", "MARRIAGE", "EDUCATION"], method="spearman")
+print(client_background_correlation_result)
+
+#%%[markdown]
+## Background Correlation
+# There are no significant correlations to defaulting in October 2005 from the background data.
+
+#%%
+# Limit balance correlation
+client_limit_balance_correlation_result = plot_correlation(clients_data, ["LIMIT_BAL"], method="spearman")
+print(client_limit_balance_correlation_result)
+
+#%%[markdown]
+## Limit Balance Correlation
+# The limit balance has a moderate weak correlation with defaulting in October 2005.
 
 #%%
 # Creating an average of Pay_status(Pay_)
@@ -219,8 +235,6 @@ pay_status_cols = [
     "April_Pay_status"
 ]
 
-# clients_data["Mean_Pay_Status"] = clients_data[pay_status_cols].mean(axis=1)
-
 # Creating an average of Pay_anount
 pay_amount_cols = [
     "Sept_Pay_Amount",
@@ -230,8 +244,6 @@ pay_amount_cols = [
     "May_Pay_Amount",
     "April_Pay_Amount"
 ]
-
-clients_data["Mean_Pay_Amount"] = clients_data[pay_amount_cols].mean(axis=1)
 
 # Creating an average of Bill_amount
 bill_amount_cols = [
@@ -243,26 +255,43 @@ bill_amount_cols = [
     "April_Bill_Amount"
 ]
 
+clients_data["Mean_Pay_Amount"] = clients_data[pay_amount_cols].mean(axis=1)
 clients_data["Mean_Bill_Amount"] = clients_data[bill_amount_cols].mean(axis=1)
 
 # correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION", "Mean_Pay_Status", "Mean_Pay_Amount", "Mean_Bill_Amount"])
-correlation_result = plot_correlation(clients_data, ["AGE", "LIMIT_BAL", "SEX", "MARRIAGE", "EDUCATION", "Mean_Pay_Amount", "Mean_Bill_Amount"])
-print(correlation_result)
+client_spending_correlation_result = plot_correlation(clients_data, ["Mean_Pay_Amount", "Mean_Bill_Amount"])
+print(client_spending_correlation_result)
 
-# Conclusion: Mean Pay status has a strong correlation with the target column
-
+#%%[markdown]
+## Spending Correlation
+# The mean pay amount has a weak negative correlation with defaulting in October 2005.
+# Mean bill amount has no relationship with defaulting in October 2005.
 
 #%%
-correlation_result = plot_correlation(clients_data, ["Sept_Pay_status","August_Pay_status","July_Pay_status", "June_Pay_status", "May_Pay_status","April_Pay_status"], method="spearman")
-print(correlation_result)
+client_monthly_pay_status_correlation_result = plot_correlation(clients_data, ["Sept_Pay_status","August_Pay_status","July_Pay_status", "June_Pay_status", "May_Pay_status","April_Pay_status"], method="spearman")
+print(client_monthly_pay_status_correlation_result)
 
-# %%[markdown]
-# EDA Takeaways so far:
+#%%[markdown]
+## Payment Status Correlation
+# The payment status has a modertate positive correlation with defaulting in October 2005 for all of the months.
+# It becomes stronger in the months closer to October
 
-# 1. The most important features for predicting default are the average payment status in the last 3 months
-# From here we can consider momentum
-# 2. The limit balance is a good predictor of default.
-# We found no other useful features that are not already in the dataset
+#%%
+# Momentum Correlation
+client_momentum_correlation_result = plot_correlation(clients_data, ["Momentum"], method="spearman")
+print(client_momentum_correlation_result)
+
+#%%[markdown]
+## Momentum Correlation
+# The momentum has a moderate positive correlation with defaulting in October 2005.
+# It is the best predictor we have based on correlation.
+
+#%%[markdown]
+## Observations thus far:
+# 1. The most important feature for predicting default is momentum
+# 2. The next is the monthly pay status, especially for months approaching October. Note, momentum accounts for this with weights.
+# 3. The final relevant feature is the limit balance.
+# 4. The background data has no significant correlation with defaulting in October 2005.
 
 
 #%%
@@ -295,11 +324,19 @@ default_counts = clients_data["default_payment_next_month"].value_counts()
 print(f"Default Payment Counts: {default_counts}")
 
 #%%
+momentum_proportions =  (
+    clients_data.groupby("Momentum_Label")["default_payment_next_month"]
+    .value_counts(normalize=True)
+    .rename("proportion")
+    .reset_index()
+)
 plt.figure(figsize=(8, 6))
-sns.histplot(data=clients_data, x="Momentum", hue="default_payment_next_month", multiple="stack", bins=30, palette="Set2")
-plt.title("Distribution of Default Payments by Momentum")
+sns.barplot(data=momentum_proportions,x="Momentum_Label", y="proportion", hue="default_payment_next_month")
+plt.title("Distribution of October Default Payments by Momentum")
 plt.xlabel("Momentum")
 plt.ylabel("Frequency")
+plt.ylim(0.0, 1.0)
+plt.legend(title="Payment Defaulted in October")
 plt.show()
 
 # Show the proportion of default payments by momentum
@@ -316,11 +353,14 @@ print(clients_data.groupby("Momentum")["default_payment_next_month"].value_count
 # There is a slight uptick in likelihood of defaulting when the momentum is bad.
 
 # %%[markdown]
-# Clients who defaulted in October, were more likely to have later payment status in September.
-# This reinforces the idea that payment status is a good predictor of default.
+## EDA Summary
+# Clients who defaulted in October, were more likely to have later payment status in months closer to October.
+# This indicates that payment status is a good predictor of default.
 #
 # There is a relationship between momentum and default payment.
+# When momentum is bad, we hypothesize that the client is more likely to default.
 # 
 # There is a relationship between high limit balance and default payment.
+# As limit balance increases, the odds of defaulting also increase.
 
 # %%
