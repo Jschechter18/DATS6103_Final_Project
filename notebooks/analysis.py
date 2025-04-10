@@ -102,6 +102,10 @@ def plot_correlation(df, feature_cols, method="pearson", target_col = "default_p
 
 # Function to calculate momentum by row
 def calculate_weighted_momentum(row):
+    pay_status_cols = [
+        "April_Pay_status", "May_Pay_status", "June_Pay_status",
+        "July_Pay_status", "August_Pay_status", "Sept_Pay_status"
+    ]
     weights = [1, 2, 3, 4, 5, 6]  # Weights for April to September, increasing the closer to October
     weighted_sum = sum(weights[i] * row[pay_status_cols[i]] for i in range(len(pay_status_cols)))
     # return "Bad Momentum" if weighted_sum > 20 else "Stable/Improving"  # Adjust threshold as needed
