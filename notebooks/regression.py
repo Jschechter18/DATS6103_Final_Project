@@ -43,7 +43,7 @@ def calculate_weighted_momentum(row, pay_status_cols=pay_status_cols):
     # return 1 if weighted_sum > 10 else 0  # Adjust threshold as needed
     return 1 if weighted_sum > 20 else 0  # Adjust threshold as needed
 
-def run_linear_regression(df, columns, target="default_payment_next_month", plot_name=None, max_iter=1000, test_size=0.2):
+def run_logistic_regression(df, columns, target="default_payment_next_month", plot_name=None, max_iter=1000, test_size=0.2):
     X = df[columns]
     y = df[target]
 
@@ -260,7 +260,7 @@ clients_encoded = pd.get_dummies(clients_data, columns=['Momentum','Sept_Pay_sta
 
 # %%
 # Model 1: Sept Pay status, Momentum, LIMIT_BAL
-model_1_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+model_1_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
@@ -270,14 +270,14 @@ print_model_results(*model_1_results, "model 1")
 
 
 # Model 2: Momentum, LIMIT_BAL
-# rmse_model_2, accuracy_model_2, precision_model_2, conf_matrix_model_2, recall_model_2, f1_model_2 = run_linear_regression(clients_encoded, ['Momentum_1', 'LIMIT_BAL'])
-model_2_results = run_linear_regression(clients_encoded, ['Momentum_1', 'LIMIT_BAL'], plot_name='Momentum, LIMIT_BAL')
+# rmse_model_2, accuracy_model_2, precision_model_2, conf_matrix_model_2, recall_model_2, f1_model_2 = run_logistic_regression(clients_encoded, ['Momentum_1', 'LIMIT_BAL'])
+model_2_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'LIMIT_BAL'], plot_name='Momentum, LIMIT_BAL')
 print_model_results(*model_2_results, "model 2")
 # print(f"Model 2 F1: {model_2_results[-1]}")
 
 
 # Model 3: Sept Pay status, LIMIT_BAL
-model_3_results = run_linear_regression(clients_encoded, ['Sept_Pay_status_-1',
+model_3_results = run_logistic_regression(clients_encoded, ['Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8','LIMIT_BAL'])
@@ -286,12 +286,12 @@ print_model_results(*model_3_results, "model 3")
 
 
 # Model 4: LIMIT_BAL
-model_4_results = run_linear_regression(clients_encoded, ['LIMIT_BAL'], plot_name='LIMIT_BAL')
+model_4_results = run_logistic_regression(clients_encoded, ['LIMIT_BAL'], plot_name='LIMIT_BAL')
 print_model_results(*model_4_results, "model 4")
 # print(f"Model 4 F1: {model_4_results[-1]}")
 
 # Model 5: Sept Pay status
-model_5_results = run_linear_regression(clients_encoded, ['Sept_Pay_status_-1',
+model_5_results = run_logistic_regression(clients_encoded, ['Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8'])
@@ -435,12 +435,12 @@ clients_encoded.columns
 #%%
 # Try modeling again with new features
 # Model 6: Sept Pay status, Momentum, LIMIT_BAL, num_late_months
-# model_6_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+# model_6_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
 #        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
 #        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
 #        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
 #        'LIMIT_BAL', ""], plot_name = "Momentum, Sept Pay status, LIMIT_BAL, num_late_months")
-model_6_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+model_6_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
@@ -449,7 +449,7 @@ model_6_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pa
        'num_late_months_5', 'num_late_months_6'], plot_name = "Momentum, Sept Pay status, LIMIT_BAL, num_late_months")
 print_model_results(*model_6_results, "model 6")
 
-model_7_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+model_7_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
@@ -462,7 +462,7 @@ model_7_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pa
 print_model_results(*model_7_results, "model 7")
 
 # Model 8: Sept Pay status, Momentum, LIMIT_BAL, num_late_months, Max_Pay_Status
-model_8_results = run_linear_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+model_8_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
        'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
        'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
