@@ -1049,3 +1049,79 @@ plt.show()
 # %% 
 # drop useless column 
 df.drop("payment_to_bill_ratio", axis = 1, inplace = True)
+
+
+# %% 
+### STATISTICAL TESTS FOR VARIABLES ###
+from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency, pearsonr, shapiro
+
+# Recreate Numeric Columns after the drop 
+numeric_cols = df.select_dtypes(include='number')
+numeric_cols = numeric_cols.drop(columns=['default_status'], errors='ignore')  
+
+
+# 1. t-tests / Mann-Whitney U Test for Numerical Features
+print("\n### T-Tests / Mann-Whitney U Tests for Numerical Features ###\n")
+
+for col in numeric_cols.columns:
+    group0 = df[df['default_status'] == 0][col]
+    group1 = df[df['default_status'] == 1][col]
+    
+    # First check if both groups are normally distributed
+    stat0, p0 = shapiro(group0)
+    stat1, p1 = shapiro(group1)
+    
+    if p0 > 0.05 and p1 > 0.05:
+        # If both are normal, use t-test
+        stat, p = ttest_ind(group0, group1)
+        test_name = "T-test"
+    else:
+        # Otherwise, use Mann-Whitney U Test
+        stat, p = mannwhitneyu(group0, group1, alternative='two-sided')
+        test_name = "Mann-Whitney U"
+    
+    print(f"{col}: {test_name} --> statistic = {stat:.4f}, p-value = {p:.4f}")
+    # Interpretation: p < 0.05 means significant difference between default groups
+
+# %% 
+# 2. Chi-square Tests for Categorical Features
+print("\n### Chi-Square Tests for Categorical Features ###\n")
+
+categorical_features = ['sex', 'marriage_status', 'education', 'momentum_label']
+
+for col in categorical_features:
+    contingency_table = pd.crosstab(df[col], df['default_status'])
+    stat, p, dof, expected = chi2_contingency(contingency_table)
+    print(f"{col}: Chi-square statistic = {stat:.4f}, p-value = {p:.4f}")
+    # Interpretation: p < 0.05 means feature and default status are dependent
+
+# %%
+# VIF 
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+# Step 1: Select only primary features
+primary_features = [
+    'credit_limit', 'age',
+    'repayment_september', 'repayment_august', 'repayment_july', 
+    'repayment_june', 'repayment_may', 'repayment_april',
+    'bill_september', 'bill_august', 'bill_july', 'bill_june', 'bill_may', 'bill_april',
+    'payment_am_september', 'payment_am_august', 'payment_am_july', 
+    'payment_am_june', 'payment_am_may', 'payment_am_april'
+]
+
+# Step 2: Prepare Data
+vif_data = df[primary_features]
+
+# Step 3: Drop constant columns
+vif_data = vif_data.loc[:, vif_data.std() > 0]
+
+# Step 4: Calculate VIF
+vif_df = pd.DataFrame()
+vif_df["Feature"] = vif_data.columns
+vif_df["VIF"] = [variance_inflation_factor(vif_data.values, i) for i in range(vif_data.shape[1])]
+
+# Step 5: Display
+print("\n### Corrected VIF Results ###")
+print(vif_df.sort_values("VIF", ascending=False))
+
+
