@@ -13,8 +13,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+<<<<<<< Updated upstream
 # !pip install pycaret
 # !pip install pycaret[tuners]
+=======
+#!pip install pycaret
+>>>>>>> Stashed changes
 from pycaret.classification import *
 from scipy.stats import spearmanr
 from sklearn.linear_model import LogisticRegression
@@ -845,6 +849,7 @@ best_models = compare_models(sort='F1')
 ## Tuning & Optimiziation
 """
 
+<<<<<<< Updated upstream
 # Pycaret tuning ada boost
 # variables that we want to use
 # variables
@@ -1217,3 +1222,5 @@ plot_model(calibrated_gbc, plot = 'gain')
 
 # feature importance
 plot_model(tuned_gbc_model, plot = 'feature')
+=======
+>>>>>>> Stashed changes
