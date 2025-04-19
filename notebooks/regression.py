@@ -43,6 +43,23 @@ def calculate_weighted_momentum(row, pay_status_cols=pay_status_cols):
     # return 1 if weighted_sum > 10 else 0  # Adjust threshold as needed
     return 1 if weighted_sum > 20 else 0  # Adjust threshold as needed
 
+def determine_low_repayment_months(row, pay_status_cols=pay_status_cols):
+    # Check if any of the last 6 months have a payment status above 0
+    return sum(row[pay_status_cols] != '1') + sum(row[pay_status_cols] == '0') + sum(row[pay_status_cols] == '-1') + sum(row[pay_status_cols] == '-2')
+    # return sum(row[pay_status_cols] == '1') + sum(row[pay_status_cols] == '2') + sum(row[pay_status_cols] == '3')
+
+def print_model_results(rmse, accuracy, precision, conf_matrix, recall, f1, model_number):
+    print(f"F1 Score {model_number}: {f1}")
+    print(f"Recall {model_number}: {recall}")
+    print(f"Precision {model_number}: {precision}")
+    print(f"RMSE {model_number}: {rmse}")
+    print(f"Accuracy {model_number}: {accuracy}")
+    print(f"Confusion Matrix {model_number}:\n{conf_matrix}")
+    print()
+  
+  
+#%%
+# Model Functions
 def run_logistic_regression(df, columns, target="default_payment_next_month", plot_name=None, max_iter=1000, test_size=0.2):
     X = df[columns]
     y = df[target]
@@ -80,22 +97,70 @@ def run_logistic_regression(df, columns, target="default_payment_next_month", pl
     f1 = f1_score(y_test, y_pred)
     
     if plot_name != None:
-        plot_logistic_regression_results(y_test, y_pred, y_pred_proba, plot_name)
+        plot_roc_auc(y_test, y_pred, y_pred_proba, plot_name)
         # # Check if LIMIT_BAL is linear
         # check_logit_linearity(model, X_test, columns[-1])
     
     return rmse, accuracy, precision, conf_matrix, recall, f1
 
-def print_model_results(rmse, accuracy, precision, conf_matrix, recall, f1, model_number):
-    print(f"F1 Score {model_number}: {f1}")
-    print(f"Recall {model_number}: {recall}")
-    print(f"Precision {model_number}: {precision}")
-    print(f"RMSE {model_number}: {rmse}")
-    print(f"Accuracy {model_number}: {accuracy}")
-    print(f"Confusion Matrix {model_number}:\n{conf_matrix}")
-    print()
-  
-  
+def run_random_forest_classifier(df, columns, target="default_payment_next_month", test_size=0.2):
+    X = df[columns]
+    y = df[target]
+
+    model = RandomForestClassifier(class_weight="balanced", random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    print("F1:", f1_score(y_test, y_pred))
+    print("Recall:", recall_score(y_test, y_pred))
+    print("Precision:", precision_score(y_test, y_pred))
+    return classification_report(y_test, y_pred, output_dict=True)
+
+
+def run_xgboost(df, columns, target="default_payment_next_month", test_size=0.2, random_state=42, plot=False):
+    X = df[columns]
+    y = df[target]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
+
+    model = XGBClassifier(
+        use_label_encoder=False,
+        eval_metric="logloss",
+        scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum(),  # handles imbalance
+        random_state=random_state
+    )
+
+    model.fit(X_train, y_train)
+    y_probs = model.predict_proba(X_test)[:, 1]
+
+    # Optional: threshold tuning
+    best_threshold = 0.5
+    best_f1 = 0
+    for t in np.arange(0.1, 0.9, 0.01):
+        y_temp_pred = (y_probs >= t).astype(int)
+        f1 = f1_score(y_test, y_temp_pred)
+        if f1 > best_f1:
+            best_f1 = f1
+            best_threshold = t
+
+    y_pred = (y_probs >= best_threshold).astype(int)
+
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    conf_matrix = confusion_matrix(y_test, y_pred)
+
+    print(f"\nBest Threshold: {best_threshold:.2f}")
+    print(f"F1 Score: {f1:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"Accuracy: {accuracy:.4f}")
+    print("Confusion Matrix:")
+    print(conf_matrix)
+
+    return model
+
 #%%
 # Plotting functions
 
@@ -114,7 +179,7 @@ def plot_correlation(df, feature_cols, method="pearson", target_col = "default_p
 
     return target_correlation
     
-def plot_logistic_regression_results(y_test, y_pred, y_pred_proba, feature_name, model_name="Logistic Regression"):
+def plot_roc_auc(y_test, y_pred, y_pred_proba, feature_name, model_name="Logistic Regression"):
     # Plot Confusion Matrix
     ConfusionMatrixDisplay.from_predictions(y_test, y_pred, cmap="Blues")
     plt.title(f"{feature_name} - Confusion Matrix")
@@ -235,11 +300,25 @@ clients_data["Momentum"] = clients_data.apply(calculate_weighted_momentum, axis=
 clients_data["Momentum_Label"] = clients_data["Momentum"].map({0: "Stable/Improving", 1: "Bad Momentum"})
 
 #%%
+
+
+# clients_data["low_repayment_months"] = (clients_data[pay_status_cols] != '0' or clients_data[pay_status_cols] != '-1' or clients_data[pay_status_cols] != '-2').sum(axis=1)
+clients_data["low_repayment_months"] = clients_data[pay_status_cols].apply(determine_low_repayment_months, axis=1)
+
+#%%
+clients_data['repayment_volatility'] = clients_data[pay_status_cols].std(axis = 1)
+clients_data["super_default_score"] = (
+    0.5 * clients_data["low_repayment_months"] +     # Strongest, but not too dominant
+    0.35 * clients_data["Momentum"] +                 # Close to 0.4, important
+    0.15 * clients_data["repayment_volatility"]       # Still useful, but smaller
+)
+
+#%%
 # View the resulting dataframe
 clients_data.head()
 
 #%%
-plot_correlation(clients_data, feature_cols=['Momentum', 'Sept_Pay_status', 'LIMIT_BAL'], method="spearman", target_col = "default_payment_next_month")
+plot_correlation(clients_data, feature_cols=['Momentum', 'super_default_score', 'repayment_volatility', 'Sept_Pay_status', 'LIMIT_BAL'], method="spearman", target_col = "default_payment_next_month")
 
 #%%
 clients_encoded = pd.get_dummies(clients_data, columns=['Momentum','Sept_Pay_status'], drop_first=True)
@@ -317,18 +396,7 @@ print()
 #%%
 # See if random forest classifier yields better results
 
-def run_random_forest_classifier(df, columns, target="default_payment_next_month", test_size=0.2):
-    X = df[columns]
-    y = df[target]
 
-    model = RandomForestClassifier(class_weight="balanced", random_state=42)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    print("F1:", f1_score(y_test, y_pred))
-    print("Recall:", recall_score(y_test, y_pred))
-    print("Precision:", precision_score(y_test, y_pred))
-    return classification_report(y_test, y_pred, output_dict=True)
 
 rand_forest_model_1 = run_random_forest_classifier(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
@@ -341,49 +409,6 @@ rand_forest_model_1
 # %%
 # Try xgboost to see if it yields better results
 
-def run_xgboost(df, columns, target="default_payment_next_month", test_size=0.2, random_state=42, plot=False):
-    X = df[columns]
-    y = df[target]
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
-
-    model = XGBClassifier(
-        use_label_encoder=False,
-        eval_metric="logloss",
-        scale_pos_weight=(y_train == 0).sum() / (y_train == 1).sum(),  # handles imbalance
-        random_state=random_state
-    )
-
-    model.fit(X_train, y_train)
-    y_probs = model.predict_proba(X_test)[:, 1]
-
-    # Optional: threshold tuning
-    best_threshold = 0.5
-    best_f1 = 0
-    for t in np.arange(0.1, 0.9, 0.01):
-        y_temp_pred = (y_probs >= t).astype(int)
-        f1 = f1_score(y_test, y_temp_pred)
-        if f1 > best_f1:
-            best_f1 = f1
-            best_threshold = t
-
-    y_pred = (y_probs >= best_threshold).astype(int)
-
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred)
-    recall = recall_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
-
-    print(f"\nBest Threshold: {best_threshold:.2f}")
-    print(f"F1 Score: {f1:.4f}")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"Accuracy: {accuracy:.4f}")
-    print("Confusion Matrix:")
-    print(conf_matrix)
-
-    return model
 
 feature_columns = ['Momentum_1', 'Sept_Pay_status_-1',
        'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
@@ -523,4 +548,20 @@ print_multiple_models_results(new_logit_models, i=6)
 # what the banks preference is, to catch more defaults, even if too many, or to catch less defaults but have
 # better customer service.
 # 
+# Newly engineered feature: super_default_score
+# %%
+
+model_9_results = run_logistic_regression(clients_encoded, ['Momentum_1', 'Sept_Pay_status_-1',
+       'Sept_Pay_status_0', 'Sept_Pay_status_1', 'Sept_Pay_status_2',
+       'Sept_Pay_status_3', 'Sept_Pay_status_4', 'Sept_Pay_status_5',
+       'Sept_Pay_status_6', 'Sept_Pay_status_7', 'Sept_Pay_status_8',
+       'LIMIT_BAL', 'num_late_months_1',
+       'num_late_months_2', 'num_late_months_3', 'num_late_months_4',
+       'num_late_months_5', 'num_late_months_6', 'Max_Pay_Status_-1',
+       'Max_Pay_Status_0', 'Max_Pay_Status_1', 'Max_Pay_Status_2',
+       'Max_Pay_Status_-1', 'Max_Pay_Status_0', 'Max_Pay_Status_1',
+       'Max_Pay_Status_2', 'Max_Pay_Status_3', 'Max_Pay_Status_4',
+       'Max_Pay_Status_5', 'Max_Pay_Status_6', 'Max_Pay_Status_7',
+       'Max_Pay_Status_8', 'super_default_score'], plot_name = "Momentum, Sept Pay status, LIMIT_BAL, num_late_months, Max_Pay_Status")
+print_model_results(*model_9_results, "model 9")
 # %%
