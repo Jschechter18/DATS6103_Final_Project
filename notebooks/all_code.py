@@ -204,10 +204,7 @@ clients_data["MARRIAGE"].value_counts(
 
 # drop 3 and 0 class in marriage variable
 clients_data = clients_data[~clients_data["MARRIAGE"].isin([0, 3])]
-#%% Check the change of Marriage Variable value counts 
-# check
-clients_data["MARRIAGE"].value_counts(normalize= True)
-
+#%%
 # It doesn't have an ordinal relationship as it is a nominal categorical variable.
 # Let's convert that to binary
 # That's fine now!
@@ -216,8 +213,13 @@ clients_data["MARRIAGE"].value_counts(normalize= True)
 # Let's convert that to binary
 # 1 - Married
 # 2 - Single
-clients_data["MARRIAGE"] = clients_data["MARRIAGE"].astype("category")
 
+# Binary 
+# 1 - Married
+# 0 - Not Married 
+clients_data["MARRIAGE"] = clients_data["MARRIAGE"].astype("category")
+clients_data["MARRIAGE"] = clients_data["MARRIAGE"].map({1: 1, 2: 0})
+clients_data["MARRIAGE"].value_counts(normalize= True)
 # %% 
 # Education Variable 
 # 1 - graduate
@@ -364,6 +366,7 @@ plt.title("Proportion of Default by Marriage Status",
 
 # x-axis
 plt.xlabel("Marriage Status", fontsize=20)
+plt.xticks(ticks=[0, 1], labels=["Married", "Single"])
 
 # y-axis
 plt.ylabel("Proportion", fontsize=20)
@@ -416,6 +419,7 @@ plt.title("Proportion of Default by Education Level",
 
 # x-axis
 plt.xlabel("Education Level", fontsize=20)
+plt.xticks(ticks=[0, 1, 2], labels=["Graduate", "Undergraduate", "High School"])
 
 # y-axis
 plt.ylabel("Proportion", fontsize=20)
@@ -857,7 +861,6 @@ compare_models(sort = "F1")
 # Crete A Momentum Variable 
 clients_data_converted["Momentum"] = clients_data_converted.apply(calculate_weighted_momentum, axis=1)
 
-
 # dynamic column search for repayment status
 rp_columns = [col for col in clients_data_converted.columns if 'pay' in col.lower() and 'status' in col.lower()]
 
@@ -965,14 +968,6 @@ plt.ylabel('Features', fontsize=14)
 plt.yticks(fontsize=12)
 
 plt.show()
-#%%
-# Also, I don't think we momentum_label as we already have momentum
-clients_data_converted.drop(columns = ["Momentum_Label"], inplace = True)
-
-# Check
-clients_data_converted.info()
-
-#%%
 # %%
 # Correlation Matrix
 full_corr_matrix = numeric_cols.corr()
@@ -1031,6 +1026,7 @@ continuous_candidates = [
     'momentum_recent_mean_interaction',
     'momentum_stability_flag',
     'low_repayment_months',
+    'average_repayment_status'
 ]
 
 results = []
@@ -1174,17 +1170,21 @@ end_time = time.time()
 selected_features = list(sfs.k_feature_names_)
 print(f"\n Selected Features ({len(selected_features)}):\n", selected_features)
 print(f" Feature selection completed in {end_time - start_time:.2f} seconds")
-
 # %%
 # Best variables combination is: 
-variables = ['Sept_Pay_status', 'August_Pay_status', 'July_Pay_status', 'June_Pay_status', 'May_Pay_status',
- 'Momentum',
- 'momentum_stability_flag',
- 'risk_index_1_log',
- 'low_repayment_months_log',
- 'momentum_recent_mean_interaction_log',
- 'recent_repayment_mean_log',
- 'momentum_volatility_interaction_log']
+variables = ['Sept_Pay_status', 
+             'August_Pay_status', 
+             'July_Pay_status',
+             'June_Pay_status', 
+             'May_Pay_status',
+            'Momentum',
+            'momentum_stability_flag',
+            'risk_index_1_log',
+            'low_repayment_months_log',
+            'momentum_recent_mean_interaction_log',
+            'recent_repayment_mean_log',
+            'average_repayment_status_log',
+             'momentum_volatility_interaction_log']
 
 # Let's just use it in a single prediction
 # Variables
@@ -1214,7 +1214,7 @@ y_pred = model.predict(X_test)
 f1 = f1_score(y_test, y_pred)
 
 f1
-# 46% F1 on test data without any modifications
+# 47% F1 on test data without any modifications
 
 #%%
 from imblearn.pipeline import Pipeline
@@ -1246,7 +1246,7 @@ skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 scores = cross_val_score(pipeline, X, Y, scoring='f1', cv=skf)
 print("Stratified F1 scores:", scores)
 print("Mean Stratified F1 score:", scores.mean())
-# Average F1 across 5 folds is: 0.52% - increase in F1 after oversampling and normalization
+# Average F1 across 5 folds is: 0.527% - increase in F1 after oversampling and normalization
 
 #%% [markdown]
 ## Final Modeling + Tuning
@@ -1260,6 +1260,7 @@ variables = ['Sept_Pay_status', 'August_Pay_status', 'July_Pay_status', 'June_Pa
  'low_repayment_months_log',
  'momentum_recent_mean_interaction_log',
  'recent_repayment_mean_log',
+ 'average_repayment_status_log',
  'momentum_volatility_interaction_log']
 
 # Create a new dataframe with selected features and target
@@ -1311,6 +1312,7 @@ tuned_gbc_model = tune_model(gbc_model,
 # check the formula 
 tuned_gbc_model
 
+#%%
 # write down manually incase if session crashes
 tuned_gbc_model = create_model("gbc",
                                ccp_alpha=0.0,
@@ -1385,7 +1387,7 @@ predict_model(tuned_ada_model)
 
 #%%
 #%% plots for the model 
-# predict tuned model on test data
+# AUC
 plot_model(tuned_ada_model, plot = 'auc')
 
 # confusion matrix
@@ -1438,6 +1440,9 @@ tuned_lgbm = create_model('lightgbm',
 predict_model(tuned_lgbm)
 
 #%% 
+# roc-auc
+plot_model(tuned_lgbm, plot = 'auc')
+
 # confusion matrix
 plot_model(tuned_lgbm, plot = 'confusion_matrix', plot_kwargs= {"percent": True})
 
@@ -1455,3 +1460,4 @@ plot_model(tuned_lgbm, plot = 'gain')
 
 # feature importance
 plot_model(tuned_lgbm, plot = 'feature')
+
