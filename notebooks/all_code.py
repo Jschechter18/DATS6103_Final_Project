@@ -1,5 +1,5 @@
 #%% [markdown]
-## Improrts and Data Information #### 
+## Imports and Data Information #### 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -598,7 +598,6 @@ plt.legend(["Married",
             "Single"])
 plt.show()
 
-#%%
 # %%
 # proportions
 # figure size
@@ -705,7 +704,7 @@ sns.heatmap(
 
 # Design
 # Title
-plt.title('Correlation Matrix: Only Positively Correlated Features with Default Status', fontsize=18, fontweight='bold')
+plt.title('Correlation Matrix: Correlated Features with Default Status', fontsize=18, fontweight='bold')
 
 # X-axis
 plt.xticks(rotation=45, ha='right')
@@ -896,18 +895,19 @@ clients_data_converted['momentum_recent_mean_interaction'] = clients_data_conver
 
 # Momentum Stability Flag
 clients_data_converted['momentum_stability_flag'] = np.where(
-    (clients_data_converted['Momentum'] == 1) & (clients_data_converted['repayment_volatility'] < 1.0), 1, 0
+    (clients_data_converted['Momentum'] == 0) & (clients_data_converted['repayment_volatility'] < 1.0), 1, 0
 ).astype('int64')
 
 # Final Formula
 clients_data_converted["super_default_score_final"] = (
-    0.4 * clients_data_converted["low_repayment_months"] +              # Core: missed payments
-    0.2 * clients_data_converted["Momentum"] +                           # Trend: good or bad momentum
-    0.1 * clients_data_converted["repayment_volatility"] +               # Instability risk
-    0.1 * clients_data_converted["recent_repayment_mean"] +              # Recent repayment behavior
-    0.1 * clients_data_converted["momentum_volatility_interaction"] +    # Combined volatility + momentum
-    0.05 * clients_data_converted["repayment_deterioration"] +           # How much repayment worsened
-    0.05 * clients_data_converted["repayment_acceleration"]              # Whether worsening accelerated
+    0.25 * clients_data_converted["low_repayment_months"] +                # Missed payments (strongest)
+    0.20 * clients_data_converted["recent_repayment_mean"] +               # Recency behavior
+    0.10 * clients_data_converted["momentum_recent_mean_interaction"] +    # Recency + momentum
+    0.10 * clients_data_converted["Momentum"] +                             # Worsening trend
+    0.10 * clients_data_converted["momentum_volatility_interaction"] +     # Instability + trend
+    0.10 * clients_data_converted["average_repayment_status"] +            # Long-term repayment status
+    0.10 * clients_data_converted["risk_index_1"] -                         # Risk score from multiple signals
+    0.10 * clients_data_converted["momentum_stability_flag"]               # Penalize stable-good behavior
 )
 
 # Average features 
@@ -972,16 +972,10 @@ plt.show()
 # Correlation Matrix
 full_corr_matrix = numeric_cols.corr()
 
-# Get features with positive correlation to default_status
-positive_corr_features = full_corr_matrix['default_payment_next_month'][full_corr_matrix['default_payment_next_month'] > 0].index.tolist()
-
-# Subset the correlation matrix dynamically
-positive_corr_matrix = full_corr_matrix.loc[positive_corr_features, positive_corr_features]
-
 # Plot heatmap
-plt.figure(figsize=(12, 10))
+plt.figure(figsize=(30, 20))
 sns.heatmap(
-    positive_corr_matrix,
+    full_corr_matrix,
     annot=True,
     fmt=".2f",
     cmap="coolwarm",
@@ -1112,7 +1106,7 @@ print(target_corr[abs(target_corr) > 0.15])
 
 ## Feature Selection 
 # Using Forward Feature Selection and Efficiency 
-# Forard Feature Selection found the most combintion
+# Forward Feature Selection found the most combintion
 #%%
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
@@ -1153,7 +1147,7 @@ pipeline = Pipeline([
 
 # Setup Sequential Feature Selector
 sfs = SFS(estimator=pipeline,
-          k_features="best",
+          k_features="parsimonious",
           forward=True,
           floating=True,
           scoring=make_scorer(f1_score),
@@ -1163,66 +1157,44 @@ sfs = SFS(estimator=pipeline,
 
 # Run SFS
 start_time = time.time()
-sfs.fit(X, y)
+sfs.fit(X, Y)
 end_time = time.time()
 
 # Extract Selected Features
 selected_features = list(sfs.k_feature_names_)
 print(f"\n Selected Features ({len(selected_features)}):\n", selected_features)
 print(f" Feature selection completed in {end_time - start_time:.2f} seconds")
+
 # %%
 # Best variables combination is: 
-variables = ['Sept_Pay_status', 
-             'August_Pay_status', 
-             'July_Pay_status',
-             'June_Pay_status', 
-             'May_Pay_status',
-            'Momentum',
-            'momentum_stability_flag',
-            'risk_index_1_log',
-            'low_repayment_months_log',
-            'momentum_recent_mean_interaction_log',
-            'recent_repayment_mean_log',
-            'average_repayment_status_log',
-             'momentum_volatility_interaction_log']
+# variables = ['Sept_Pay_status', 
+#             'August_Pay_status', 
+#             'July_Pay_status',
+#             'June_Pay_status', 
+#             'May_Pay_status',
+#         'Momentum',
+#         'momentum_stability_flag',
+#         'risk_index_1_log',
+#         'low_repayment_months_log',
+#         'momentum_recent_mean_interaction_log',
+#         'recent_repayment_mean_log',
+#         'average_repayment_status_log',
+#             'momentum_volatility_interaction_log']
 
-# Let's just use it in a single prediction
-# Variables
-# Target variable
-Y = clients_data_filtered["default_payment_next_month"]
-
-# Feature candidates
-X = clients_data_filtered.drop(columns=["default_payment_next_month"])
-
-# Variables set
-X = X[variables]
-
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2,
-                                                    stratify=Y,
-                                                    random_state=42)
-
-# Model
-model = LGBMClassifier()
-
-# Model fit
-model.fit(X_train, y_train)
-
-# Predict
-# fit
-y_pred = model.predict(X_test)
-f1 = f1_score(y_test, y_pred)
-
-f1
-# 47% F1 on test data without any modifications
-
-#%%
 from imblearn.pipeline import Pipeline
 from imblearn.combine import SMOTETomek
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.model_selection import StratifiedKFold
+
+# Best variable combination is: 
+variables = ['Sept_Pay_status', 
+             'June_Pay_status', 
+             'May_Pay_status', 
+             'momentum_stability_flag',
+            'low_repayment_months_log', 
+            'momentum_recent_mean_interaction_log']
 
 # Let's use it in cross-validation 
 # We will use STOMETomek oversampling, RobustScaler for normalizations, and 
@@ -1246,22 +1218,101 @@ skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 scores = cross_val_score(pipeline, X, Y, scoring='f1', cv=skf)
 print("Stratified F1 scores:", scores)
 print("Mean Stratified F1 score:", scores.mean())
-# Average F1 across 5 folds is: 0.527% - increase in F1 after oversampling and normalization
+# Average F1 across 5 folds 
+# With this combination is: 0.5322% 
 
+#%%
+# Using Backward Selection 
+# Variables
+# Target variable
+Y = clients_data_filtered["default_payment_next_month"]
+
+# Feature candidates
+X = clients_data_filtered.drop(columns=["default_payment_next_month"])
+
+
+# Light Gradient Boosting Classifier as selector,as it is: 
+# Redundant to noise, can find non-linear relationships, doesn't care about multicolliearity
+# Pretty fast and efficient 
+
+# Define model
+model = LGBMClassifier(
+    n_estimators=300,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    random_state=42,
+    class_weight="balanced"
+)
+
+
+# Build pipeline: scaling + model
+pipeline = Pipeline([
+    ('scaler', RobustScaler()),
+    ('clf', model)
+])
+
+# Setup Sequential Feature Selector
+sfs = SFS(estimator=pipeline,
+          k_features="parsimonious",
+          forward=False,
+          floating=True,
+          scoring=make_scorer(f1_score),
+          cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
+          n_jobs=-1,
+          verbose=2)
+
+# Run SFS
+start_time = time.time()
+sfs.fit(X, Y)
+end_time = time.time()
+
+# Extract Selected Features
+selected_features = list(sfs.k_feature_names_)
+print(f"\n Selected Features ({len(selected_features)}):\n", selected_features)
+print(f" Feature selection completed in {end_time - start_time:.2f} seconds")
+
+#%%
+# Best Variables combination check for Backward Selection
+# Best variable combination is: 
+variables = ['Sept_Pay_status', 
+             'May_Pay_status', 
+             'momentum_stability_flag', 
+             'low_repayment_months_log']
+
+# Let's use it in cross-validation and test
+# We will use STOMETomek oversampling, RobustScaler for normalizations, and 
+# StratifiedCrossValidation with 5 folds for combatting the class imbalance. 
+
+# Features and target
+Y = clients_data_filtered["default_payment_next_month"]
+X =  clients_data_filtered[variables]
+
+# Build the pipeline
+pipeline = Pipeline([
+    ('scaler', RobustScaler()),
+    ('smote_tomek', SMOTETomek(random_state=42)),
+    ('clf', LGBMClassifier())
+])
+
+# stratified Cross-Vaidation
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+# Evaluate
+scores = cross_val_score(pipeline, X, Y, scoring='f1', cv=skf)
+print("Stratified F1 scores:", scores)
+print("Mean Stratified F1 score:", scores.mean())
+# Average F1 across 5 folds 
+# With this combination is: 0.5342%
 #%% [markdown]
 ## Final Modeling + Tuning
 # Let's use  our variables combination we found and fit them to Pycaret for all models 
-# Forward selection Pycaret
+# Backward Selection PyCaret
 # variables
-variables = ['Sept_Pay_status', 'August_Pay_status', 'July_Pay_status', 'June_Pay_status', 'May_Pay_status',
- 'Momentum',
- 'momentum_stability_flag',
- 'risk_index_1_log',
- 'low_repayment_months_log',
- 'momentum_recent_mean_interaction_log',
- 'recent_repayment_mean_log',
- 'average_repayment_status_log',
- 'momentum_volatility_interaction_log']
+variables = ['Sept_Pay_status', 
+             'May_Pay_status', 
+             'momentum_stability_flag', 
+             'low_repayment_months_log']
 
 # Create a new dataframe with selected features and target
 df_pycaret = clients_data_filtered[variables + ['default_payment_next_month']]
@@ -1290,6 +1341,9 @@ clf_setup = setup(
     fold_strategy='stratifiedkfold',
     fold=5,
 
+    # experimentation
+    experiment_name = "baseline_after_selection",
+
     verbose=True)
 
 # Compare all models
@@ -1315,26 +1369,15 @@ tuned_gbc_model
 #%%
 # write down manually incase if session crashes
 tuned_gbc_model = create_model("gbc",
-                               ccp_alpha=0.0,
-                               criterion='friedman_mse',
-                               init=None,
-                               learning_rate=0.005,
-                               loss='log_loss',
-                               max_depth=10,
-                               max_features='log2',
-                               max_leaf_nodes=None,
-                               min_impurity_decrease=0.3,
-                               min_samples_leaf=2,
-                               min_samples_split=10,
-                               min_weight_fraction_leaf=0.0,
-                               n_estimators=180,
-                               n_iter_no_change=None,
-                               random_state=42,
-                               subsample=0.35,
-                               tol=0.0001,
-                               validation_fraction=0.1,
-                               verbose=True,
-                               warm_start=False)
+                            ccp_alpha=0.0, criterion='friedman_mse', init=None,
+                           learning_rate=0.4, loss='log_loss', max_depth=1,
+                           max_features=1.0, max_leaf_nodes=None,
+                           min_impurity_decrease=0.4, min_samples_leaf=4,
+                           min_samples_split=2, min_weight_fraction_leaf=0.0,
+                           n_estimators=130, n_iter_no_change=None,
+                           random_state=42, subsample=0.6, tol=0.0001,
+                           validation_fraction=0.1, verbose=True,
+                           warm_start=False)
 # predict the tuned model on testing data
 predict_model(tuned_gbc_model)
 #%%
@@ -1380,8 +1423,8 @@ tuned_ada_model
 
 #%%
 # type manually
-tuned_ada_model = create_model("ada", algorithm='SAMME', learning_rate=0.5,
-                   n_estimators=240, random_state=42)
+tuned_ada_model = create_model("ada", algorithm='SAMME', learning_rate=0.2,
+                   n_estimators=70, random_state=42)
 # predict tuned model on test data
 predict_model(tuned_ada_model)
 
