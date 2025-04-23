@@ -1423,8 +1423,8 @@ tuned_ada_model
 
 #%%
 # type manually
-tuned_ada_model = create_model("ada", algorithm='SAMME', learning_rate=0.2,
-                   n_estimators=70, random_state=42)
+tuned_ada_model = create_model("ada", algorithm='SAMME', learning_rate=0.1,
+                   n_estimators=180, random_state=42)
 # predict tuned model on test data
 predict_model(tuned_ada_model)
 
@@ -1472,13 +1472,14 @@ tuned_lgbm
 #%%
 # Create model manually in case if session crashes
 tuned_lgbm = create_model('lightgbm',
-                          bagging_fraction=0.7, bagging_freq=6, boosting_type='gbdt',
-               class_weight=None, colsample_bytree=1.0, feature_fraction=1.0,
-               importance_type='split', learning_rate=0.4, max_depth=-1,
-               min_child_samples=81, min_child_weight=0.001, min_split_gain=0.6,
-               n_estimators=170, n_jobs=-1, num_leaves=40, objective=None,
-               random_state=42, reg_alpha=4, reg_lambda=0.4, subsample=1.0,
+                          bagging_fraction=0.6, bagging_freq=5, boosting_type='gbdt',
+               class_weight=None, colsample_bytree=1.0, feature_fraction=0.8,
+               importance_type='split', learning_rate=0.05, max_depth=-1,
+               min_child_samples=86, min_child_weight=0.001, min_split_gain=0.9,
+               n_estimators=130, n_jobs=-1, num_leaves=40, objective=None,
+               random_state=42, reg_alpha=2, reg_lambda=0.001, subsample=1.0,
                subsample_for_bin=200000, subsample_freq=0)
+
 # predict on test data
 predict_model(tuned_lgbm)
 
@@ -1488,6 +1489,7 @@ plot_model(tuned_lgbm, plot = 'auc')
 
 # confusion matrix
 plot_model(tuned_lgbm, plot = 'confusion_matrix', plot_kwargs= {"percent": True})
+plot_model(tuned_lgbm, plot = 'confusion_matrix')
 
 # precision-recall curve
 plot_model(tuned_lgbm, plot = 'pr')
@@ -1504,3 +1506,133 @@ plot_model(tuned_lgbm, plot = 'gain')
 # feature importance
 plot_model(tuned_lgbm, plot = 'feature')
 
+
+# %%
+#### Logistic Regression
+# create the model
+logistic_model = create_model('lr')
+                          
+# predict on test data
+predict_model(logistic_model)
+
+#%%
+# tune model
+tuned_logistic = tune_model(logistic_model,
+                        optimize = "f1",
+                                  n_iter = 50,
+                                 choose_better= True)
+
+# Check the formula
+tuned_logistic
+# Logistic Function failed to tune and improve results
+# Use casual logstic function
+#%%
+# predict on test data
+predict_model(logistic_model)
+
+#%%
+# We try optimizing our logistic regression even more 
+# by threshold optimization, finding prob.threshold that is better than 0.5
+optimized_logistic = optimize_threshold(logistic_model, 
+                                        optimize = "f1", 
+                                        return_data = True)
+# threshold optimization failed - 0.5 the best threshold for us 
+# We still hav few options, let's try to create a logistic ensemble model
+
+# %%
+# Ensemble Model out of logistic regression
+# bagging method 
+bagged_logistic = ensemble_model(logistic_model, 
+                                 optimize= "f1", 
+                                choose_better = True)
+# bagging also failed, as original was better.
+#%%
+# boosting method 
+boost_logistic = ensemble_model(logistic_model, 
+                                method = "Boosting",
+                                optimize= "f1", 
+                                choose_better = True)
+# boosting also failed, as original model was better. 
+# This is the maximum we can achieve with logistic model. 
+#%% 
+# roc-auc
+plot_model(tuned_logistic, plot = 'auc')
+
+# confusion matrix
+plot_model(tuned_logistic, plot = 'confusion_matrix', plot_kwargs= {"percent": True})
+
+# precision-recall curve
+plot_model(tuned_logistic, plot = 'pr')
+
+# classification report
+plot_model(tuned_logistic, plot = 'class_report')
+
+# lift curve
+plot_model(tuned_logistic, plot = 'lift')
+
+# gain
+plot_model(tuned_logistic, plot = 'gain')
+
+# feature importance
+plot_model(tuned_logistic, plot = 'feature')
+#%%
+### Experimental:
+### Blending
+# Blending and Stacking Models that we have
+# Let's do Blending First
+blender = blend_models([tuned_gbc_model, 
+                       tuned_ada_model, 
+                       tuned_lgbm, 
+                       logistic_model],
+                       optimize= "f1", 
+                       choose_better= True)
+# Blending models failed, original model was returned
+# Let's remove weakeest model and try again
+#%%
+blender_trees = blend_models([tuned_gbc_model, 
+                       tuned_ada_model, 
+                       tuned_lgbm],
+                       optimize= "f1", 
+                       choose_better= True)
+# Failed again, let's remove weakest model again
+#%%
+blender_top = blend_models([tuned_gbc_model, 
+                       tuned_lgbm],
+                       optimize= "f1", 
+                       choose_better= True)
+# Still worse than single model, we can't do anything more at blending
+# Let's try stacking. 
+#%%
+### Stacking
+# First, all models 
+stacker = stack_models([tuned_gbc_model, 
+                       tuned_ada_model, 
+                       tuned_lgbm, 
+                       logistic_model],
+                       optimize= "f1", 
+                       choose_better= True, 
+                       # choosing meta model the best that we have 
+                       meta_model= lgbm_model, 
+                       restack= True)
+# Worse than a single tuned lightGBM model, however let's again remove 
+# weakest model. 
+#%%
+stacker_trees = stack_models([tuned_gbc_model, 
+                       tuned_ada_model, 
+                       tuned_lgbm],
+                       optimize= "f1", 
+                       choose_better= True, 
+                       # choosing meta model the best that we have 
+                       meta_model= lgbm_model, 
+                       restack= True)
+# Again, it's not working. 
+# Let's remove last weakest model and see how it's going to react. 
+#%%
+stacker_top = stack_models([tuned_gbc_model, 
+                       tuned_lgbm],
+                       optimize= "f1", 
+                       choose_better= True, 
+                       # choosing meta model the best that we have 
+                       meta_model= lgbm_model, 
+                       restack= True)
+# Neither stacking or blending work. So our best model is - LIGHTGBM
