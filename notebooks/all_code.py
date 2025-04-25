@@ -135,8 +135,9 @@ def run_logistic_regression(df, columns, target="default_payment_next_month", pl
     y = df[target]
 
     # model = LogisticRegression(max_iter=max_iter)
-    model = LogisticRegression(max_iter=max_iter, class_weight="balanced")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+    model = LogisticRegression(max_iter=max_iter, class_weight="balanced", 
+                               random_state= 42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state = 42)
     model.fit(X_train, y_train)
     
     # y_pred = model.predict(X_test)
@@ -170,6 +171,12 @@ def run_logistic_regression(df, columns, target="default_payment_next_month", pl
         # # Check if LIMIT_BAL is linear
         # check_logit_linearity(model, X_test, columns[-1])
     
+    # print the results 
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
+
     return accuracy, precision, conf_matrix, recall, f1
 
 def run_random_forest_classifier(df, columns, target="default_payment_next_month", test_size=0.2):
@@ -177,12 +184,14 @@ def run_random_forest_classifier(df, columns, target="default_payment_next_month
     y = df[target]
 
     model = RandomForestClassifier(class_weight="balanced", random_state=42)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state= 42)
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     print("F1:", f1_score(y_test, y_pred))
     print("Recall:", recall_score(y_test, y_pred))
     print("Precision:", precision_score(y_test, y_pred))
+    print(f"Classification Report:\n{classification_report(y_test, y_pred, output_dict=True)}")
+
     return classification_report(y_test, y_pred, output_dict=True)
 
 def print_model_results(accuracy, precision, conf_matrix, recall, f1, model_number):
@@ -1288,14 +1297,15 @@ variables = ['Sept_Pay_status',
 log_reg_model = run_logistic_regression(
     clients_data_filtered,
     variables,
-    # target="default_payment_next_month",
-    plot_name="Initial Logistic Regression",
+    target="default_payment_next_month",
+    plot_name="Initial Logistic Regression"
 )
 
+#%%
 rand_forest_model = run_random_forest_classifier(
     clients_data_filtered,
     variables,
-    # target="default_payment_next_month",
+    target="default_payment_next_month",
     # plot_name="Initial Random Forest Classifier",
 )
 
