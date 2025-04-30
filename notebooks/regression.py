@@ -72,7 +72,6 @@ def run_logistic_regression(df, columns, target="default_payment_next_month", pl
     
     mse = mean_squared_error(y_test, y_pred)
     
-    rmse = np.sqrt(mse)
     accuracy = accuracy_score(y_test, y_pred)
     conf_matrix = confusion_matrix(y_test, y_pred)
     precision = precision_score(y_test, y_pred)
@@ -84,13 +83,12 @@ def run_logistic_regression(df, columns, target="default_payment_next_month", pl
         # # Check if LIMIT_BAL is linear
         # check_logit_linearity(model, X_test, columns[-1])
     
-    return rmse, accuracy, precision, conf_matrix, recall, f1
+    return accuracy, precision, conf_matrix, recall, f1
 
-def print_model_results(rmse, accuracy, precision, conf_matrix, recall, f1, model_number):
+def print_model_results(accuracy, precision, conf_matrix, recall, f1, model_number):
     print(f"F1 Score {model_number}: {f1}")
     print(f"Recall {model_number}: {recall}")
     print(f"Precision {model_number}: {precision}")
-    print(f"RMSE {model_number}: {rmse}")
     print(f"Accuracy {model_number}: {accuracy}")
     print(f"Confusion Matrix {model_number}:\n{conf_matrix}")
     print()

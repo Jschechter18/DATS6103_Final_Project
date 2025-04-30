@@ -11,10 +11,18 @@ from scipy.stats import spearmanr
 from pycaret.classification import *
 from scipy.stats import spearmanr
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, confusion_matrix, mean_squared_error, precision_score, f1_score, recall_score, roc_curve, auc, ConfusionMatrixDisplay
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
+from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency, pearsonr, shapiro
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import RobustScaler
+from lightgbm import LGBMClassifier
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import make_scorer, f1_score
+from mlxtend.feature_selection import SequentialFeatureSelector as SFS
+import time
 
 #%% [markdown]
 ## Feature Information
@@ -121,6 +129,100 @@ def plot_correlation(df, feature_cols, method="pearson", target_col = "default_p
     plt.show()
 
     return target_correlation
+
+def run_logistic_regression(df, columns, target="default_payment_next_month", plot_name=None, max_iter=1000, test_size=0.2):
+    X = df[columns]
+    y = df[target]
+
+    # model = LogisticRegression(max_iter=max_iter)
+    model = LogisticRegression(max_iter=max_iter, class_weight="balanced", 
+                               random_state= 42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state = 42)
+    model.fit(X_train, y_train)
+    
+    # y_pred = model.predict(X_test)
+    
+    # NOTE: Trying out this for y_pred to see if we can get better results
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    # threshold = 0.4  # Adjust as needed
+    best_threshold = 0.5
+    best_f1 = 0
+    for t in np.arange(0.1, 0.9, 0.01):
+        y_temp_pred = (y_pred_proba >= t).astype(int)
+        f1 = f1_score(y_test, y_temp_pred)
+        if f1 > best_f1:
+            best_f1 = f1
+            best_threshold = t
+
+    # y_pred = (y_pred_proba >= threshold).astype(int)
+    # print(f"Best threshold: {best_threshold}")
+    y_pred = (y_pred_proba >= best_threshold).astype(int)
+    
+    mse = mean_squared_error(y_test, y_pred)
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    
+    if plot_name != None:
+        plot_logistic_regression_results(y_test, y_pred, y_pred_proba, plot_name)
+        # # Check if LIMIT_BAL is linear
+        # check_logit_linearity(model, X_test, columns[-1])
+    
+    # print the results 
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
+
+    return accuracy, precision, conf_matrix, recall, f1
+
+def run_random_forest_classifier(df, columns, target="default_payment_next_month", test_size=0.2):
+    X = df[columns]
+    y = df[target]
+
+    model = RandomForestClassifier(class_weight="balanced", random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state= 42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    print("F1:", f1_score(y_test, y_pred))
+    print("Recall:", recall_score(y_test, y_pred))
+    print("Precision:", precision_score(y_test, y_pred))
+    print(f"Classification Report:\n{classification_report(y_test, y_pred, output_dict=True)}")
+
+    return classification_report(y_test, y_pred, output_dict=True)
+
+def print_model_results(accuracy, precision, conf_matrix, recall, f1, model_number):
+    print(f"F1 Score {model_number}: {f1}")
+    print(f"Recall {model_number}: {recall}")
+    print(f"Precision {model_number}: {precision}")
+    print(f"Accuracy {model_number}: {accuracy}")
+    print(f"Confusion Matrix {model_number}:\n{conf_matrix}")
+    print()
+    
+def plot_logistic_regression_results(y_test, y_pred, y_pred_proba, feature_name, model_name="Logistic Regression"):
+    # Plot Confusion Matrix
+    ConfusionMatrixDisplay.from_predictions(y_test, y_pred, cmap="Blues")
+    plt.title(f"{feature_name} - Confusion Matrix")
+    # plt.title(f"{model_name} - Confusion Matrix")
+    plt.show()
+
+    # Plot ROC Curve
+    fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color="blue", label=f"ROC Curve (AUC = {roc_auc:.2f})")
+    plt.plot([0, 1], [0, 1], color="gray", linestyle="--")  # Diagonal line
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title(f"{feature_name} - ROC Curve")
+    # plt.title(f"{model_name} - ROC Curve")
+    plt.legend(loc="lower right")
+    plt.savefig(f"../figures/{feature_name}_{model_name}_roc_curve.png")
+    plt.show()
 
 #%%
 # Load our data 
@@ -626,7 +728,6 @@ plt.show()
 # Statistical tests
 
 # For Numeric Variables
-from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency, pearsonr, shapiro
 
 # Recreate Numeric Columns 
 numeric_cols = clients_data.select_dtypes(include='number')
@@ -773,8 +874,7 @@ clients_data_converted["EDUCATION"].value_counts(normalize= True)
 # Polynomial Testing
 # We want to see if by converting some of the numerical variables to Polynomials/Log, there is a gain in F1 metric
 # Let's test polynomials need
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score
+
 
 # Selected continuous variables for transformation
 continuous_candidates = [
@@ -1108,13 +1208,7 @@ print(target_corr[abs(target_corr) > 0.15])
 # Using Forward Feature Selection and Efficiency 
 # Forward Feature Selection found the most combintion
 #%%
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import RobustScaler
-from lightgbm import LGBMClassifier
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import make_scorer, f1_score
-from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-import time
+
 
 # Variables
 # Target variable
@@ -1195,6 +1289,28 @@ variables = ['Sept_Pay_status',
              'momentum_stability_flag',
             'low_repayment_months_log', 
             'momentum_recent_mean_interaction_log']
+
+
+#%%
+# Initial Modeling
+# df, columns, target="default_payment_next_month", plot_name=None, max_iter=1000, test_size=0.2
+log_reg_model = run_logistic_regression(
+    clients_data_filtered,
+    variables,
+    target="default_payment_next_month",
+    plot_name="Initial Logistic Regression"
+)
+
+#%%
+rand_forest_model = run_random_forest_classifier(
+    clients_data_filtered,
+    variables,
+    target="default_payment_next_month",
+    # plot_name="Initial Random Forest Classifier",
+)
+
+
+#%%
 
 # Let's use it in cross-validation 
 # We will use STOMETomek oversampling, RobustScaler for normalizations, and 
